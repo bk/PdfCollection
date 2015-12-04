@@ -10,8 +10,10 @@ binmode STDOUT, ":encoding(UTF-8)";
 my $archiver = new PdfCollection::Archiver;
 
 my $fn = shift
-    or die qq{Usage: $0 pdf-file [meta-tag ...] [attr: value ...]
-Basedir is: }.$archiver->{basedir}."\n";
+    or die qq{Archive a single PDF file, optionally with tags/meta-attr.
+Usage: $0 pdf-file [meta-tag ...] ["attr: value" ...]
+Current basedir: $archiver->{basedir}.
+};
 
 my @info = @ARGV;
 
