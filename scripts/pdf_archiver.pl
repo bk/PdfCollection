@@ -4,6 +4,9 @@ use strict;
 use YAML ();
 use PdfCollection::Archiver;
 
+binmode STDIN, ":encoding(UTF-8)";
+binmode STDOUT, ":encoding(UTF-8)";
+
 my $archiver = new PdfCollection::Archiver;
 
 my $fn = shift
@@ -11,9 +14,6 @@ my $fn = shift
 Basedir is: }.$archiver->{basedir}."\n";
 
 my @info = @ARGV;
-
-binmode STDIN, ":encoding(UTF-8)";
-binmode STDOUT, ":encoding(UTF-8)";
 
 print YAML::Dump(
     $archiver->archive($fn, @info)
