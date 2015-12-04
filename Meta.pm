@@ -25,7 +25,7 @@ sub _init {
 sub read_meta {
     # reads a meta file and returns the contents as a hashref
     my ($self, $sha1) = @_;
-    my $fn = $self->_meta_path($sha1);
+    my $fn = $self->_meta_path($sha1, 1);
     my $fc = read_file($fn, {binmode=>':utf8'});
     return Load($fc);
 }
@@ -33,7 +33,8 @@ sub read_meta {
 sub write_meta {
     # Writes a complete meta entry
     my ($self, $sha1, $meta) = @_;
-    my $fn = $self->_meta_path($sha1);
+    my $fn = $self->_meta_path($sha1, 0);
+    warn "writing meta: $fn\n";
     return write_file($fn, {atomic=>1, binmode=>':utf8'}, Dump($meta));
 }
 
@@ -55,17 +56,17 @@ sub get_notes {
 }
 
 sub _meta_path {
-    my ($self, $sha1) = @_;
-    return $self->_path($sha1, 'meta_file');
+    my ($self, $sha1, $must_exist) = @_;
+    return $self->_path($sha1, 'meta_file', $must_exist);
 }
 
 sub _notes_path {
-    my ($self, $sha1) = @_;
-    return $self->_path($sha1, 'notes_file');
+    my ($self, $sha1, $must_exist) = @_;
+    return $self->_path($sha1, 'notes_file', $must_exist);
 }
 
 sub _path {
-    my ($self, $sha1, $key) = @_;
+    my ($self, $sha1, $key, $must_exist) = @_;
     die "Invalid key: $key"
         unless $key eq 'meta_file' || $key eq 'notes_file';
     if ($sha1 =~ /\b([a-f0-9]{40})\b/) {
@@ -74,7 +75,9 @@ sub _path {
         die "BAD SHA1: $sha1";
     }
     my $path = join('/', $self->{basedir}, substr($sha1,0,2), $sha1, $self->{$key});
-    die "FILE NOT FOUND: $path" unless -e $path;
+    if ($must_exist) {
+        die "FILE NOT FOUND: $path" unless -e $path;
+    }
     return $path;
 }
 

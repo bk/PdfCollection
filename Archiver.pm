@@ -5,6 +5,7 @@ use locale;
 use Digest::SHA;
 use DateTime;
 use File::Copy qw/copy/;
+use File::Basename qw/basename/;
 use YAML ();
 use LWP::UserAgent;
 use LWP::Simple;
@@ -14,6 +15,8 @@ use PdfCollection::SQLiteFTS;
 
 use constant DEFAULT_BASEDIR => $ENV{HOME} . '/pdfcollection';
 use constant DEFAULT_META_FILE => 'meta.yml';
+# relative to basedir
+use constant DEFAULT_MAKEFILE_TEMPLATE => 'bin/Makefile.in';
 
 sub new {
     my ($pk, %opt) = @_;
@@ -28,6 +31,11 @@ sub _init {
     my $self = shift;
     $self->{basedir} ||= DEFAULT_BASEDIR;
     $self->{meta_file} ||= DEFAULT_META_FILE;
+    $self->{makefile_template} ||= DEFAULT_MAKEFILE_TEMPLATE;
+    $self->{makefile_template} = join(
+        '/', $self->{basedir}, $self->{makefile_template})
+        unless $self->{makefile_template} =~ /^\//;
+    $self->{no_fts_index} ||= 0;
 }
 
 sub archive {
@@ -50,6 +58,9 @@ sub archive {
     my $meta = init_meta($fn, $sha1);
     link($fn, $new_fn) or copy($fn, $new_fn) or die "link/copy failed";
     my ($pages, $doi, $isbn) = pdf_processing($dir, $sha1);
+    unless ($isbn) {
+        $isbn = $1 if $fn =~ /isbn(\d{10}(?:\d\d\d)?)/i;
+    }
     $meta->{pages} = $pages;
     my @tags = ();
     foreach my $item (@info) {
@@ -69,20 +80,30 @@ sub archive {
     elsif ($isbn) {
         $renamed = write_isbn_info($isbn, $meta, $dir, $sha1);
     }
+    chdir $dir;
     if ($renamed) {
         rename $new_fn, $renamed;
-        symlink $renamed, $new_fn;
+        symlink basename($renamed), basename($new_fn);
         $new_fn = $renamed;
     }
     $meta->{full_path} = $new_fn;
+    $meta->{filename} = basename($new_fn);
     my $pdfinfo = get_pdfinfo($new_fn);
     $meta->{pdfinfo} = $pdfinfo if $pdfinfo;
     my %auxargs = (
         basedir=>$self->{basedir}, meta_file=>$self->{meta_file});
     my $mo = new PdfCollection::Meta(%auxargs);
-    $mo->write_meta($meta);
-    my $fts = new PdfCollection::SQLiteFTS(%auxargs);
-    $fts->index_bundle($meta->{sha1});
+    $mo->write_meta($sha1, $meta);
+    unless ($self->{no_fts_index}) {
+        my $fts = new PdfCollection::SQLiteFTS(%auxargs);
+        $fts->index_bundle($meta->{sha1});
+    }
+    # Do some housekeeping: Add a Makefile to the directory and
+    # create a zipfile. Then call make clean so as to remove the
+    # temporary pdf and text files.
+    link $self->{makefile_template}, "Makefile";
+    system("zip $sha1.txt.zip *.page_[0-9][0-9][0-9][0-9].txt");
+    system("make clean");
     return $meta;
 }
 
@@ -238,16 +259,19 @@ PdfCollection::Archiver - archive pdf files in collection
   my $archiver = new PdfCollection::Archiver;
   $archiver->archive($filename);
 
+=head1 DESCRIPTION
+
+TDB
+
 =head1 SEE ALSO
 
 pdf_archiver.pl
 
 =head1 REQUIREMENTS
 
-
+TBD
 
 =head1 AUTHOR
-
 
 Baldur A. Kristinsson, 2015
 

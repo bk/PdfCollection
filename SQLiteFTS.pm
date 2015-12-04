@@ -61,6 +61,11 @@ sub index_bundle {
     }
     warn "- $sha1\n" if $self->{verbose};
     $self->{_indexed_bundles}++;
+    my $need_make = -f "$dir/$sha1.page_0001.txt" ? 0 : 1;
+    if ($need_make) {
+        chdir $dir;
+        system("make");
+    }
     opendir DIR, $dir;
     my @files = grep { /page_\d+\.txt$/ } readdir DIR;
     closedir DIR;
@@ -68,6 +73,7 @@ sub index_bundle {
         my $text = read_file("$dir/$f", binmode=>':utf8') or die "Could not read $dir/$f";
         $self->index_page(folder_sha1=>$sha1, file_name=>$f, text=>$text);
     }
+    system("make clean") if $need_make;
 }
 
 sub _init {
