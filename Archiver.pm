@@ -2,6 +2,8 @@ package PdfCollection::Archiver;
 
 use strict;
 use locale;
+use utf8;
+use open qw/:std :utf8/;
 use Digest::SHA;
 use DateTime;
 use File::Copy qw/copy/;
@@ -57,7 +59,7 @@ sub archive {
         if -f "$dir/$self->{meta_file}";
     my $meta = init_meta($fn, $sha1);
     link($fn, $new_fn) or copy($fn, $new_fn) or die "link/copy failed";
-    my ($pages, $doi, $isbn) = pdf_processing($dir, $sha1);
+    my ($pages, $doi, $isbn) = pdf_processing($dir, $sha1, $fn);
     unless ($isbn) {
         $isbn = $1 if $fn =~ /isbn(\d{10}(?:\d\d\d)?)/i;
     }
@@ -179,7 +181,7 @@ sub get_pdfinfo {
 }
 
 sub pdf_processing {
-    my ($dir, $sha1) = @_;
+    my ($dir, $sha1, $orig_fn) = @_;
     chdir $dir;
     system("pdftk", "$sha1.pdf", "burst", "output", "$sha1.page_%04d.pdf");
     my $fc = 0;
@@ -211,6 +213,15 @@ sub pdf_processing {
             close IN;
         }
     }
+    # Fallback: check for DOI/ISBN in filename
+    unless ($doi) {
+        $orig_fn =~ s/%2f/\//gi;
+        $doi = $1 if $orig_fn =~ /doi.?(10\.[\w\-\/]+)/i;
+    }
+    unless ($isbn) {
+        $orig_fn =~ s/\-//g;
+        $isbn = $1 if $orig_fn =~ /isbn\D?(\d{10,13})\b/i;
+    }
     closedir DIR;
     unlink "doc_data.txt" if -f "doc_data.txt";
     return ($fc, $doi, $isbn);
@@ -237,6 +248,7 @@ sub sha1sum {
     my $fn = shift;
     return unless -f $fn;
     open my $fh, $fn or die "Could not open file for SHA1: $fn\n";
+    binmode $fh, qw/:raw/;
     my $sha1 = Digest::SHA->new;
     $sha1->addfile($fh);
     close $fh;
