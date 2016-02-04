@@ -3,6 +3,7 @@ package PdfCollection::SQLiteFTS;
 use strict;
 use DBI;
 use Digest::SHA qw/sha1_hex/;
+use PdfCollection::Meta;
 use Text::Ligature qw/from_ligatures/;
 use File::Slurp qw/read_file/;
 use locale;
@@ -33,6 +34,7 @@ sub index_all {
         closedir DIR;
         foreach my $bundle (@bundles) {
             $self->index_bundle($bundle);
+            $self->index_meta($bundle);
         }
     }
     # optimize and combine b-trees
@@ -42,8 +44,36 @@ sub index_all {
     }
 }
 
-sub index_bundle {
-    # Index a given directory/SHA1 container
+sub index_meta {
+    my ($self, $sha1) = @_;
+    $sha1 =~ s/.*\///; # remove possible leading dir
+    my ($dir, $mod_dir, $mod_meta) = $self->_bundleinfo($sha1);
+    # before: folder_sha1; after: ts
+    my @core_fields = qw(author title subtitle year pages summary);
+    my $dbh = $self->{dbh};
+    my $rec = $dbh->selectrow_hashref("select * from meta where folder_sha1 = ?", {}, $sha1) || {};
+    my $meta = $self->{m}->read_meta($sha1);
+    if (! $rec->{meta_id}) {
+        # insert
+        warn " - $sha1 (meta - insert)\n" if $self->{verbose};
+        my $sql = "insert into meta (folder_sha1, "
+            . join(', ', @core_fields)
+            . ", ts) values (?, ?,?,?,?,?,?, ?)";
+        $dbh->do($sql, {}, $sha1, @{$meta}{@core_fields}, $mod_meta);
+    }
+    elsif ($rec->{ts} < $mod_meta) {
+        # update
+        warn " - $sha1 (meta - update)\n" if $self->{verbose};
+        my $sql = "update meta set "
+            . join(' = ?, ', @core_fields)
+            . " = ?, ts = ? where meta_id = ? and folder_sha1 = ?";
+        $dbh->do($sql, {},
+                 @{$meta}{@core_fields}, $mod_meta, $rec->{meta_id}, $sha1);
+    }
+}
+
+sub _bundleinfo {
+    # Get directory, its modification time and the mod time of the meta.yml
     my ($self, $sha1) = @_;
     $sha1 =~ s/.*\///; # remove possible directory path
     my $sd = substr($sha1, 0, 2);
@@ -56,6 +86,13 @@ sub index_bundle {
     # adding/removing a file or updating meta.yml
     my $mod_dir = (stat $dir)[9];
     my $mod_meta = (stat "$dir/meta.yml")[9];
+    return ($dir, $mod_dir, $mod_meta);
+}
+
+sub index_bundle {
+    # Index a given directory/SHA1 container
+    my ($self, $sha1) = @_;
+    my ($dir, $mod_dir, $mod_meta) = $self->_bundleinfo($sha1);
     if ($self->{reftime} > $mod_dir && $self->{reftime} > $mod_meta) {
         return unless $self->{force_update};
     }
@@ -98,6 +135,8 @@ sub _init {
     $self->{dbh} = DBI->connect(@dsn) or die "Could not open database";
     $self->{dbh}->do('pragma encoding = "UTF-8"');
     $self->_create_schema if $create;
+    $self->{m} = PdfCollection::Meta->new(
+        verbose=>$self->{verbose});
 }
 
 sub _create_schema {
@@ -106,6 +145,17 @@ sub _create_schema {
     # folder_sha1 is  is the sha1 key of the parent PDF file
     # page_id is used in lieu of rowid for the fts virtual table
     my @sql = (
+        "create table meta (
+           meta_id integer primary key,
+           folder_sha1 text,
+           author text,
+           title text,
+           subtitle text,
+           year int,
+           pages int,
+           summary text,
+           ts int,
+           unique(folder_sha1))",
         "create table page (
            page_id integer primary key,
            folder_sha1,
