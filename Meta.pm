@@ -1,4 +1,6 @@
 package PdfCollection::Meta;
+
+use strict;
 use YAML qw/Load Dump/;
 use File::Slurp qw/read_file write_file/;
 
@@ -20,6 +22,7 @@ sub _init {
     $self->{basedir} ||= DEFAULT_BASEDIR;
     $self->{meta_file} ||= DEFAULT_META_FILE;
     $self->{notes_file} ||= DEFAULT_NOTES_FILE;
+    $self->{verbose} ||= 0;
 }
 
 sub read_meta {
@@ -34,7 +37,7 @@ sub write_meta {
     # Writes a complete meta entry
     my ($self, $sha1, $meta) = @_;
     my $fn = $self->_meta_path($sha1, 0);
-    warn "writing meta: $fn\n";
+    warn "writing meta: $fn\n" if $self->{verbose};
     return write_file($fn, {atomic=>1, binmode=>':utf8'}, Dump($meta));
 }
 
@@ -45,7 +48,8 @@ sub edit_meta {
     die "The second argument to edit_meta should be a hashref"
         unless ref $add eq 'HASH';
     my $meta = $self->read_meta($sha1);
-    foreach $k (keys %$add) {
+    foreach my $k (keys %$add) {
+        warn "Adding $k to meta\n" if $self->{verbose};
         $meta->{$k} = $add->{$k};
     }
     return $self->write_meta($sha1, $meta);
@@ -95,14 +99,14 @@ PdfCollection::Meta - interface to pdfcollection meta.yml (and notes.md)
 
   use PdfCollection::Meta;
 
-  $m = new PdfCollection::Meta;
+  $m = PdfCollection::Meta->new(verbose=>1);
 
   $meta = $m->read_meta($sha1); # meta is a hashref
 
   $status = $m->write_meta($sha1, $meta);
 
-  # $add contains new or changed keys
-  $status = $m->edit_meta($sha1, $meta, $add);
+  # $add is a hashref containing new or changed keys
+  $status = $m->edit_meta($sha1, $add);
 
 =head1 AUTHOR
 
