@@ -4,6 +4,7 @@ use strict;
 use locale;
 use utf8;
 use open qw/:std :utf8/;
+
 use Digest::SHA;
 use DateTime;
 use File::Copy qw/copy/;
@@ -12,6 +13,8 @@ use YAML ();
 use LWP::UserAgent;
 use LWP::Simple;
 use JSON qw/decode_json/;
+use Text::BibTeX;
+
 use PdfCollection::Meta;
 use PdfCollection::SQLiteFTS;
 
@@ -159,11 +162,45 @@ sub get_bib {
 }
 
 sub get_isbn_info {
+    # gets data from Google Books
     my $isbn = shift;
     my $googlebooks = "https://www.googleapis.com/books/v1/volumes?q=isbn:";
     my $content = get($googlebooks.$isbn);
-    return unless $content;
-    return decode_json $content;
+    return get_otto_isbn_info($isbn) unless $content;
+    my $data = decode_json $content;
+    if (ref $data eq 'HASH' && $data->{items} && @{$data->{items}}) {
+        return $data;
+    } else {
+        return get_otto_isbn_info($isbn);
+    }
+}
+
+sub get_otto_isbn_info {
+    # fallback: gets data from ottobib.com
+    my $isbn = shift;
+    my $url = "http://www.ottobib.com/isbn/$isbn/bibtex";
+    warn "checking $url\n";
+    my $content = get($url);
+    my $bibrec = $1 if $content =~ m{<textarea.*?>(.*)</textarea>}s;
+    return unless $bibrec;
+    my $data = parse_bibrec($bibrec);
+    return unless $data;
+    $data->{bibrec} = $bibrec;
+    return {ottobib=>$data};
+}
+
+sub parse_bibrec {
+    my $entry_s = shift;
+    my $ret = {};
+    eval {
+        my $entry = new Text::BibTeX::Entry $entry_s;
+        my @fields = $entry->fieldlist;
+        foreach my $f (@fields) {
+            $ret->{$f} = $entry->get($f);
+        }
+    };
+    return if $@;
+    return $ret;
 }
 
 sub get_pdfinfo {
