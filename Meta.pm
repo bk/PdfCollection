@@ -3,6 +3,7 @@ package PdfCollection::Meta;
 use strict;
 use YAML qw/Load Dump/;
 use File::Slurp qw/read_file write_file/;
+use Text::Unidecode qw/unidecode/;
 
 use constant DEFAULT_BASEDIR => $ENV{HOME} . '/pdfcollection';
 use constant DEFAULT_META_FILE => 'meta.yml';
@@ -55,7 +56,55 @@ sub edit_meta {
     return $self->write_meta($sha1, $meta);
 }
 
+sub get_slug {
+    my ($self, $sha1, %opt) = @_;
+    my $meta = $self->read_meta($sha1);
+    my $save = $opt{save};
+    # Return a manual slug if it exists and is not being overwritten
+    if ($meta->{slug}) {
+        $save = $opt{overwrite} if $save;
+        return $meta->{slug} unless $save;
+    }
+    # Assemble the elements for the automatic slug
+    my $author = _slugify($meta->{author});
+    my $title = _slugify($meta->{title});
+    my $year = $1 if $meta->{year} && $meta->{year} =~ /(\d{4})/;
+    my $bibkey = $meta->{bibkey};
+    $bibkey =~ s/\W/-/g if $bibkey;
+    my $partial_sha = substr($sha1, 0, 7);
+    # Construct, (possibly) save and return the slug
+    my $slug = join(
+        '_',
+        grep {$_} $author, $title, $year, $bibkey, $partial_sha);
+    $self->set_slug($sha1, $slug) if $save;
+    return $slug;
+}
+
+sub _slugify {
+    # cleans a string (or arrayref of strings) in preparation
+    # for using it as part of a slug.
+    my ($s, $len) = @_;
+    return '' unless $s;
+    if (ref $s eq 'ARRAY') {
+        $s = join(' ', @$s);
+    }
+    $len ||= 30;
+    $s = lc(unidecode($s));
+    $s =~ s/\s+/-/g;
+    $s =~ s{[^a-z0-9]}{-}g;
+    $s =~ s{\-\-+}{-}g;
+    $s =~ s/^\-//;
+    $s =~ s/\-$//;
+    return length($s) < $len ? $s : substr($s, 0, $len);
+}
+
+sub set_slug {
+    my ($self, $sha1, $slug) = @_;
+    return $self->edit_meta($sha1, {slug=>$slug});
+}
+
 sub get_notes {
+    die "TBD: get_notes not implemented yet\n";
     # NB: no write_notes() method
 }
 
@@ -107,6 +156,13 @@ PdfCollection::Meta - interface to pdfcollection meta.yml (and notes.md)
 
   # $add is a hashref containing new or changed keys
   $status = $m->edit_meta($sha1, $add);
+
+  # Slug is either set manually or automatic and based on author, title,
+  # year and sha1.
+  # If save is true, it will be saved to the meta file if missing.
+  # If overwrite is true, it will be written even if already present.
+  #
+  $slug = $m->get_slug($sha1, save=>1, overwrite=>1);
 
 =head1 AUTHOR
 
