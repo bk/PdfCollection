@@ -23,8 +23,9 @@ sub new {
 }
 
 sub index_all {
-    # Index whole collection
+    # Index whole collection; only meta if meta_only opt is true.
     my $self = shift;
+    my %opts = @_;
     opendir DIR, $self->{basedir};
     my @subdirs = grep { /^[0-9a-f][0-9a-f]$/ } readdir DIR;
     closedir DIR;
@@ -33,7 +34,7 @@ sub index_all {
         my @bundles = grep { /^[0-9a-f]{40}$/ } readdir DIR;
         closedir DIR;
         foreach my $bundle (@bundles) {
-            $self->index_bundle($bundle);
+            $self->index_bundle($bundle) unless $opts{meta_only};
             $self->index_meta($bundle);
         }
     }
