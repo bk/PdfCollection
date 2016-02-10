@@ -223,13 +223,35 @@ sub delete_page {
 }
 
 sub search {
-    my ($self, $query) = @_;
+    my ($self, $query, %opt) = @_;
     utf8::upgrade($query);
+    my $dbh = $self->{dbh};
+    my $meta_res = [];
+    if ($opt{search_meta}) {
+        my @queries = $opt{meta_queries} ? @{ $opt{meta_queries} } : ($query);
+        my $col_expr = qq[lower(' '||author||' '||title||' '||summary||' ')];
+        my $like_query = join(" OR $col_expr LIKE ",
+                              map { $dbh->quote('%'.lc($_).'%') } @queries);
+        my $meta_sql = qq[
+          select
+            'meta' as type,
+            meta_id,
+            folder_sha1,
+            author,
+            title,
+            summary
+          from meta
+            where $col_expr LIKE $like_query
+          order by folder_sha1
+        ];
+        $meta_res = $dbh->selectall_arrayref($meta_sql,{Columns=>{}});
+    }
     my $lquery = $self->_prepare_query($query); # mainly lowercasing
     # TODO: create rank() function taking matchinfo(fts_page) as its
     # material, and order by that
     my $sql = qq[
       select
+        'fts' as type,
         a.page_id,
         a.folder_sha1, 
         a.file_name,
@@ -240,8 +262,8 @@ sub search {
       where fts_page match ?
       order by 2, 3
     ];
-    my $dbh = $self->{dbh};
-    return $dbh->selectall_arrayref($sql, {Columns=>{}}, $lquery);
+    my $res = $dbh->selectall_arrayref($sql, {Columns=>{}}, $lquery);
+    return [@$meta_res, @$res];
 }
 
 sub _prepare_query {
