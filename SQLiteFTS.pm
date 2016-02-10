@@ -46,7 +46,8 @@ sub index_all {
 }
 
 sub index_meta {
-    my ($self, $sha1) = @_;
+    my ($self, $sha1, %opt) = @_;
+    $opt{force_update} ||= 0;
     $sha1 =~ s/.*\///; # remove possible leading dir
     my ($dir, $mod_dir, $mod_meta) = $self->_bundleinfo($sha1);
     # before: folder_sha1; after: ts
@@ -54,22 +55,31 @@ sub index_meta {
     my $dbh = $self->{dbh};
     my $rec = $dbh->selectrow_hashref("select * from meta where folder_sha1 = ?", {}, $sha1) || {};
     my $meta = $self->{m}->read_meta($sha1);
+    my @meta_bind = ();
+    # The primary purpose here is to ensure that author is a scalar
+    foreach my $field (@core_fields) {
+        push @meta_bind, (
+            ref $meta->{$field} eq 'ARRAY'
+              ? join(" ; ", @{$meta->{$field}})
+              : "$meta->{$field}"
+        );
+    }
     if (! $rec->{meta_id}) {
         # insert
         warn " - $sha1 (meta - insert)\n" if $self->{verbose};
         my $sql = "insert into meta (folder_sha1, "
             . join(', ', @core_fields)
             . ", ts) values (?, ?,?,?,?,?,?, ?)";
-        $dbh->do($sql, {}, $sha1, @{$meta}{@core_fields}, $mod_meta);
+        $dbh->do($sql, {}, $sha1, @meta_bind, $mod_meta);
     }
-    elsif ($rec->{ts} < $mod_meta) {
+    elsif ($rec->{ts} < $mod_meta || $opt{force_update}) {
         # update
         warn " - $sha1 (meta - update)\n" if $self->{verbose};
         my $sql = "update meta set "
             . join(' = ?, ', @core_fields)
             . " = ?, ts = ? where meta_id = ? and folder_sha1 = ?";
         $dbh->do($sql, {},
-                 @{$meta}{@core_fields}, $mod_meta, $rec->{meta_id}, $sha1);
+                 @meta_bind, $mod_meta, $rec->{meta_id}, $sha1);
     }
 }
 
@@ -228,10 +238,11 @@ sub search {
     my $dbh = $self->{dbh};
     my $meta_res = [];
     if ($opt{search_meta}) {
-        my @queries = $opt{meta_queries} ? @{ $opt{meta_queries} } : ($query);
-        my $col_expr = qq[lower(' '||author||' '||title||' '||summary||' ')];
+        $opt{meta_queries} = [$query]
+            unless ref $opt{meta_queries} eq 'ARRAY' && @{ $opt{meta_queries} } ;
+        my $col_expr = qq[lower(' '||coalesce(author,'')||' '||coalesce(title,'')||' '||coalesce(subtitle, '')||' '||coalesce(summary,'')||' ')];
         my $like_query = join(" OR $col_expr LIKE ",
-                              map { $dbh->quote('%'.lc($_).'%') } @queries);
+                              map { $dbh->quote('%'.lc($_).'%') } @{ $opt{meta_queries} });
         my $meta_sql = qq[
           select
             'meta' as type,
@@ -239,6 +250,7 @@ sub search {
             folder_sha1,
             author,
             title,
+            subtitle,
             summary
           from meta
             where $col_expr LIKE $like_query
