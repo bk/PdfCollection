@@ -54,10 +54,11 @@ foreach my $row (@$res) {
         # we want entries with meta matches first
         $found{$sha1}->{HITCOUNT} += 10000;
         $display = {
-            author  =>$row->{author},
-            title   =>$row->{title},
-            summary => $row->{summary},
-            page    => 0,
+            author   =>$row->{author},
+            title    =>$row->{title},
+            subtitle => $row->{subtitle},
+            summary  => $row->{summary},
+            page     => 'N/A (meta hit)',
         };
     }
     else {
