@@ -51,7 +51,7 @@ sub index_meta {
     $sha1 =~ s/.*\///; # remove possible leading dir
     my ($dir, $mod_dir, $mod_meta) = $self->_bundleinfo($sha1);
     # before: folder_sha1; after: ts
-    my @core_fields = qw(author title subtitle year pages summary);
+    my @core_fields = qw(author title subtitle year pages summary isbn doi);
     my $dbh = $self->{dbh};
     my $rec = $dbh->selectrow_hashref("select * from meta where folder_sha1 = ?", {}, $sha1) || {};
     my $meta = $self->{m}->read_meta($sha1);
@@ -165,6 +165,8 @@ sub _create_schema {
            year int,
            pages int,
            summary text,
+           isbn text,
+           doi text,
            ts int,
            unique(folder_sha1))",
         "create table page (
