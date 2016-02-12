@@ -26,6 +26,20 @@ sub _init {
     $self->{verbose} ||= 0;
 }
 
+sub expand_sha1 {
+    # Expands a shortened sha1 into the full 40 characters.
+    # Utility method: not used internally.
+    my ($self, $shortened_sha1) = @_;
+    if (length($shortened_sha1) < 40 && length($shortened_sha1) > 4) {
+        my $glob = $self->{basedir}
+          . "/" . substr($shortened_sha1, 0, 2)
+          . "/$shortened_sha1" . '*';
+        my ($found) = glob($glob);
+        return $1 if $found && $found =~ /\b([a-f0-9]{40})\b/;
+    }
+    return $shortened_sha1;
+}
+
 sub read_meta {
     # reads a meta file and returns the contents as a hashref
     my ($self, $sha1) = @_;
