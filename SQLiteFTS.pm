@@ -83,6 +83,22 @@ sub index_meta {
     }
 }
 
+sub expunge {
+    # remove a given sha1 key from the index (both meta and fts)
+    my ($self, $sha1, %opt) = @_;
+    $sha1 = $1 if $sha1 =~ /([a-f0-9]{40})/;
+    return unless $sha1;
+    my $dbh = $self->{dbh};
+    unless ($opt{meta_only}) {
+        my $page_ids = $dbh->selectcol_arrayref(
+            "select page_id from page where folder_sha1 = ?", {}, $sha1);
+        foreach my $page_id (@$page_ids) {
+            $self->delete_page(id=>$page_id);
+        }
+    }
+    $dbh->do("delete from meta where folder_sha1 = ?", {}, $sha1);
+}
+
 sub _bundleinfo {
     # Get directory, its modification time and the mod time of the meta.yml
     my ($self, $sha1) = @_;
