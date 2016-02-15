@@ -69,7 +69,7 @@ sub index_meta {
         warn " - $sha1 (meta - insert)\n" if $self->{verbose};
         my $sql = "insert into meta (folder_sha1, "
             . join(', ', @core_fields)
-            . ", ts) values (?, ?,?,?,?,?,?, ?)";
+            . ", ts) values (?, ?,?,?,?,?,?,?,?, ?)";
         $dbh->do($sql, {}, $sha1, @meta_bind, $mod_meta);
     }
     elsif ($rec->{ts} < $mod_meta || $opt{force_update}) {
