@@ -95,6 +95,7 @@ sub archive {
     $meta->{filename} = basename($new_fn);
     my $pdfinfo = get_pdfinfo($new_fn);
     $meta->{pdfinfo} = $pdfinfo if $pdfinfo;
+    update_core_info($meta);
     my %auxargs = (
         basedir=>$self->{basedir}, meta_file=>$self->{meta_file});
     my $mo = new PdfCollection::Meta(%auxargs);
@@ -112,7 +113,49 @@ sub archive {
     return $meta;
 }
 
+
 ### PLAIN SUBS BELOW
+
+sub update_core_info {
+    # Try to set author, title, subtitle, summary, year, keywords
+    # in meta (based on bibrec / isbn info)
+    my $meta = shift;
+    # my @kw = qw/author title subtitle year keywords summary/;
+    # my ($author, $title, $subtitle, $year, $keywords, $summary);
+    my %chk = ();
+    my $bibrec = parse_bibrec($meta->{bibrec});
+    my @aitems = ();
+    if ($meta->{isbn_info} && $meta->{isbn_info}->{items}) {
+        foreach my $outer (@{ $meta->{isbn_info}->{items} }) {
+            my $it = $outer->{volumeInfo} || {};
+            my $rec = {};
+            if ($it->{authors}) {
+                $rec->{author} = ref $it->{authors} eq 'ARRAY' && @{$it->{authors}}==1 ? $it->{authors}->[0] : $it->{authors};
+            } elsif ($it->{author}) {
+                $rec->{author} = $it->{author};
+            }
+            $rec->{title} = $it->{title} if $it->{title};
+            $rec->{subtitle} = $it->{subtitle} if $it->{title};
+            $rec->{year} = $it->{publishedDate} if $it->{publishedDate};
+            $rec->{keywords} = $it->{categories} if $it->{categories};
+            $rec->{summary} = $it->{description} if $it->{description};
+            push @aitems, $rec if keys %$rec;
+        }
+    }
+    elsif ($meta->{isbn_info}->{ottobib}) {
+        push @aitems, $meta->{isbn_info}->{ottobib};
+    }
+    my $aitem = $aitems[0] || {};
+    $chk{author} = $bibrec->{author} || $aitem->{author};
+    $chk{title} = $bibrec->{title} || $aitem->{title};
+    $chk{subtitle} = $aitem->{subtitle};
+    $chk{year} = $bibrec->{year} || $aitem->{year};
+    $chk{keywords} = $aitem->{keywords};
+    $chk{summary} = $aitem->{summary};
+    foreach my $k (keys %chk) {
+        $meta->{$k} = $chk{$k} if $chk{$k};
+    }
+}
 
 sub write_isbn_info {
     my ($isbn, $meta, $dir, $sha1) = @_;
