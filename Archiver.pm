@@ -296,7 +296,7 @@ sub pdf_processing {
     # Fallback: check for DOI/ISBN in filename
     unless ($doi) {
         $orig_fn =~ s/%2f/\//gi;
-        $doi = $1 if $orig_fn =~ /doi.?(10\.[\w\-\/]+)/i;
+        $doi = $1 if $orig_fn =~ /doi.?(10\.[\w\-\/\.]+)/i;
     }
     unless ($isbn) {
         $orig_fn =~ s/\-//g;
