@@ -124,6 +124,14 @@ sub update_core_info {
     # my ($author, $title, $subtitle, $year, $keywords, $summary);
     my %chk = ();
     my $bibrec = parse_bibrec($meta->{bibrec});
+    my $pdfinfo = $meta->{pdfinfo} || {Creator=>''};
+    my $pi_title = '';
+    my $pi_author = '';
+    # For now, only trust pdfinfo in titles from the Internet Archive
+    if ($pdfinfo->{Creator} =~ /Internet Archive/i) {
+        $pi_title = $pdfinfo->{Title};
+        $pi_author = $pdfinfo->{Author};
+    }
     my @aitems = ();
     if ($meta->{isbn_info} && $meta->{isbn_info}->{items}) {
         foreach my $outer (@{ $meta->{isbn_info}->{items} }) {
@@ -146,8 +154,8 @@ sub update_core_info {
         push @aitems, $meta->{isbn_info}->{ottobib};
     }
     my $aitem = $aitems[0] || {};
-    $chk{author} = $bibrec->{author} || $aitem->{author};
-    $chk{title} = $bibrec->{title} || $aitem->{title};
+    $chk{author} = $bibrec->{author} || $aitem->{author} || $pi_author;
+    $chk{title} = $bibrec->{title} || $aitem->{title} || $pi_title;
     $chk{subtitle} = $aitem->{subtitle};
     $chk{year} = $bibrec->{year} || $aitem->{year};
     $chk{keywords} = $aitem->{keywords};
